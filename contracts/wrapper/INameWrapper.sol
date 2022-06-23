@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
 import "../registry/ENS.sol";
@@ -11,7 +12,7 @@ uint96 constant CANNOT_TRANSFER = 4;
 uint96 constant CANNOT_SET_RESOLVER = 8;
 uint96 constant CANNOT_SET_TTL = 16;
 uint96 constant CANNOT_CREATE_SUBDOMAIN = 32;
-uint96 constant CANNOT_REPLACE_SUBDOMAIN = 64;
+uint96 constant PARENT_CANNOT_CONTROL = 64;
 uint96 constant CAN_DO_EVERYTHING = 0;
 
 interface INameWrapper is IERC1155 {
@@ -33,10 +34,13 @@ interface INameWrapper is IERC1155 {
 
     event FusesBurned(bytes32 indexed node, uint96 fuses);
 
-    function ens() external view returns(ENS);
-    function registrar() external view returns(IBaseRegistrar);
-    function metadataService() external view returns(IMetadataService);
-    function names(bytes32) external view returns(bytes memory);
+    function ens() external view returns (ENS);
+
+    function registrar() external view returns (IBaseRegistrar);
+
+    function metadataService() external view returns (IMetadataService);
+
+    function names(bytes32) external view returns (bytes memory);
 
     function wrap(
         bytes calldata name,
@@ -78,15 +82,13 @@ interface INameWrapper is IERC1155 {
 
     function burnFuses(bytes32 node, uint96 _fuses) external;
 
-    function setSubnodeRecord(
-        bytes32 node,
-        bytes32 label,
-        address owner,
-        address resolver,
-        uint64 ttl
+    function burnChildFuses(
+        bytes32 parentNode,
+        bytes32 labelhash,
+        uint96 _fuses
     ) external;
 
-    function setSubnodeRecordAndWrap(
+    function setSubnodeRecord(
         bytes32 node,
         string calldata label,
         address owner,
@@ -104,12 +106,6 @@ interface INameWrapper is IERC1155 {
 
     function setSubnodeOwner(
         bytes32 node,
-        bytes32 label,
-        address owner
-    ) external returns (bytes32);
-
-    function setSubnodeOwnerAndWrap(
-        bytes32 node,
         string calldata label,
         address newOwner,
         uint96 _fuses
@@ -122,6 +118,8 @@ interface INameWrapper is IERC1155 {
     function setResolver(bytes32 node, address resolver) external;
 
     function setTTL(bytes32 node, uint64 ttl) external;
+
+    function ownerOf(uint256 id) external returns (address owner);
 
     function getFuses(bytes32 node)
         external
