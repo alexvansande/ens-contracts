@@ -30,6 +30,8 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
     INameWrapper public immutable nameWrapper;
 
     mapping(bytes32 => uint256) public commitments;
+    mapping(address => uint256) public balances;
+    uint256 public referralFee = 5;
 
     event NameRegistered(
         string name,
@@ -132,10 +134,11 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         bool reverseRecord,
         uint32 fuses,
         uint64 wrapperExpiry
-    ) public payable override {
+    ) public payable override returns (uint256) {
         IPriceOracle.Price memory price = rentPrice(name, duration);
+        uint256 totalPrice = price.base + price.premium;
         require(
-            msg.value >= (price.base + price.premium),
+            msg.value >= totalPrice,
             "ETHRegistrarController: Not enough ether provided"
         );
 
@@ -179,11 +182,40 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
             expires
         );
 
-        if (msg.value > (price.base + price.premium)) {
-            payable(msg.sender).transfer(
-                msg.value - (price.base + price.premium)
-            );
+        if (msg.value > totalPrice) {
+            payable(msg.sender).transfer(msg.value - totalPrice);
         }
+
+        return totalPrice;
+    }
+
+    function registerWithReferral(
+        string calldata _name,
+        address _owner,
+        address _referrer,
+        uint256 _duration,
+        bytes32 _secret,
+        address _resolver,
+        bytes[] calldata _data,
+        bool _reverseRecord,
+        uint32 _fuses,
+        uint64 _wrapperExpiry
+    ) public payable {
+        uint256 totalPrice = register(
+            _name,
+            _owner,
+            _duration,
+            _secret,
+            _resolver,
+            _data,
+            _reverseRecord,
+            _fuses,
+            _wrapperExpiry
+        );
+
+        uint256 referralFeePrice = (totalPrice / 100) * referralFee;
+        balances[_referrer] += referralFeePrice;
+        balances[owner()] += totalPrice - referralFeePrice;
     }
 
     function renew(string calldata name, uint256 duration)

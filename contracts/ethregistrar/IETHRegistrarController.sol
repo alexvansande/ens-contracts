@@ -33,7 +33,7 @@ interface IETHRegistrarController {
         bool,
         uint32,
         uint64
-    ) external payable;
+    ) external payable returns (uint256);
 
     function renew(string calldata, uint256) external payable;
 }
