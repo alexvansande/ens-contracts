@@ -47,11 +47,11 @@ contract BulkRenewal is IBulkRenewal {
         }
     }
 
-    function renewAll(string[] calldata names, uint256 duration)
-        external
-        payable
-        override
-    {
+    function renewAll(
+        string[] calldata names,
+        uint256 duration,
+        address referrer
+    ) external payable override {
         ETHRegistrarController controller = getController();
         for (uint256 i = 0; i < names.length; i++) {
             IPriceOracle.Price memory price = controller.rentPrice(
@@ -60,7 +60,8 @@ contract BulkRenewal is IBulkRenewal {
             );
             controller.renew{value: price.base + price.premium}(
                 names[i],
-                duration
+                duration,
+                referrer
             );
         }
         // Send any excess funds back

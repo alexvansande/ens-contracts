@@ -30,6 +30,8 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
     INameWrapper public immutable nameWrapper;
 
     mapping(bytes32 => uint256) public commitments;
+    mapping(address => uint256) public balances;
+    uint256 public referralFee = 5;
 
     event NameRegistered(
         string name,
@@ -125,6 +127,7 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
     function register(
         string calldata name,
         address owner,
+        address referrer,
         uint256 duration,
         bytes32 secret,
         address resolver,
@@ -134,63 +137,37 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         uint64 wrapperExpiry
     ) public payable override {
         IPriceOracle.Price memory price = rentPrice(name, duration);
+        uint256 totalPrice = price.base + price.premium;
         require(
-            msg.value >= (price.base + price.premium),
+            msg.value >= totalPrice,
             "ETHRegistrarController: Not enough ether provided"
         );
 
-        _consumeCommitment(
-            name,
-            duration,
-            makeCommitment(
-                name,
-                owner,
-                duration,
-                secret,
-                resolver,
-                data,
-                reverseRecord,
-                fuses,
-                wrapperExpiry
-            )
-        );
-
-        uint256 expires = nameWrapper.registerAndWrapETH2LD(
+        _register(
             name,
             owner,
             duration,
+            secret,
             resolver,
+            data,
+            reverseRecord,
             fuses,
-            wrapperExpiry
+            wrapperExpiry,
+            price
         );
 
-        _setRecords(resolver, keccak256(bytes(name)), data);
-
-        if (reverseRecord) {
-            _setReverseRecord(name, resolver, msg.sender);
+        if (msg.value > totalPrice) {
+            payable(msg.sender).transfer(msg.value - totalPrice);
         }
 
-        emit NameRegistered(
-            name,
-            keccak256(bytes(name)),
-            owner,
-            price.base,
-            price.premium,
-            expires
-        );
-
-        if (msg.value > (price.base + price.premium)) {
-            payable(msg.sender).transfer(
-                msg.value - (price.base + price.premium)
-            );
-        }
+        _setBalance(referrer, totalPrice);
     }
 
-    function renew(string calldata name, uint256 duration)
-        external
-        payable
-        override
-    {
+    function renew(
+        string calldata name,
+        uint256 duration,
+        address referrer
+    ) external payable override {
         bytes32 label = keccak256(bytes(name));
         IPriceOracle.Price memory price = rentPrice(name, duration);
         require(
@@ -204,11 +181,15 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
             payable(msg.sender).transfer(msg.value - price.base);
         }
 
+        _setBalance(referrer, price.base);
+
         emit NameRenewed(name, label, msg.value, expires);
     }
 
     function withdraw() public {
-        payable(owner()).transfer(address(this).balance);
+        uint256 amount = balances[msg.sender];
+        balances[msg.sender] = 0;
+        payable(msg.sender).transfer(amount);
     }
 
     function supportsInterface(bytes4 interfaceID)
@@ -278,5 +259,68 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
             resolver,
             string.concat(name, ".eth")
         );
+    }
+
+    function _register(
+        string calldata name,
+        address nameOwner,
+        uint256 duration,
+        bytes32 secret,
+        address resolver,
+        bytes[] calldata data,
+        bool reverseRecord,
+        uint32 fuses,
+        uint64 wrapperExpiry,
+        IPriceOracle.Price memory price
+    ) internal {
+        _consumeCommitment(
+            name,
+            duration,
+            makeCommitment(
+                name,
+                nameOwner,
+                duration,
+                secret,
+                resolver,
+                data,
+                reverseRecord,
+                fuses,
+                wrapperExpiry
+            )
+        );
+
+        uint256 expires = nameWrapper.registerAndWrapETH2LD(
+            name,
+            nameOwner,
+            duration,
+            resolver,
+            fuses,
+            wrapperExpiry
+        );
+
+        _setRecords(resolver, keccak256(bytes(name)), data);
+
+        if (reverseRecord) {
+            _setReverseRecord(name, resolver, msg.sender);
+        }
+
+        emit NameRegistered(
+            name,
+            keccak256(bytes(name)),
+            nameOwner,
+            price.base,
+            price.premium,
+            expires
+        );
+    }
+
+    function _setBalance(address referrer, uint256 amount) internal {
+        if (referrer == address(0)) {
+            balances[owner()] += amount;
+        } else {
+            uint256 referralFeePrice = (amount / 100) * referralFee;
+            balances[referrer] += referralFeePrice;
+            balances[owner()] += amount - referralFeePrice;
+        }
     }
 }
