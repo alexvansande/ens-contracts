@@ -192,6 +192,15 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         payable(msg.sender).transfer(amount);
     }
 
+    function setReferralFee(uint256 _referralFee) external onlyOwner {
+        require(
+            _referralFee <= 100,
+            "ETHRegistrarController: Referral fee max is 100"
+        );
+
+        referralFee = _referralFee;
+    }
+
     function supportsInterface(bytes4 interfaceID)
         external
         pure
