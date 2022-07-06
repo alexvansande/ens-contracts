@@ -172,7 +172,7 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         IPriceOracle.Price memory price = rentPrice(name, duration);
         require(
             msg.value >= price.base,
-            "ETHController: Not enough Ether provided for renewal"
+            "ETHRegistrarController: Not enough Ether provided for renewal"
         );
 
         uint256 expires = base.renew(uint256(label), duration);
