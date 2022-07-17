@@ -481,6 +481,13 @@ contract NameWrapper is
 
         expiry = _normaliseExpiry(expiry, oldExpiry, maxExpiry);
 
+        // if PARENT_CANNOT_CONTROL has been burned and fuses have changed
+        if (
+            oldFuses & PARENT_CANNOT_CONTROL != 0 &&
+            oldFuses | fuses != oldFuses
+        ) {
+            revert OperationProhibited(node);
+        }
         fuses |= oldFuses;
         _setFuses(node, owner, fuses, expiry);
     }
@@ -752,6 +759,7 @@ contract NameWrapper is
         uint64 expiry
     ) internal override {
         address oldWrappedOwner = ownerOf(uint256(node));
+        _canFusesBeBurned(node, fuses);
         if (oldWrappedOwner != address(0)) {
             // burn and unwrap old token of old owner
             _burn(uint256(node));
@@ -768,7 +776,6 @@ contract NameWrapper is
         uint64 expiry
     ) internal {
         names[node] = name;
-        _canFusesBeBurned(node, fuses);
         _mint(node, wrappedOwner, fuses, expiry);
         emit NameWrapped(node, name, wrappedOwner, fuses, expiry);
     }
