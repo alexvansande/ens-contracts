@@ -60,8 +60,10 @@ contract BulkRenewal is IBulkRenewal {
             );
             controller.renew{value: price.base}(names[i], duration, referrer);
         }
+
         // Send any excess funds back
-        payable(msg.sender).transfer(address(this).balance);
+        (bool ok, ) = msg.sender.call{value: address(this).balance}("");
+        require(ok, "BulkRenewal: failed to refund renew excess");
     }
 
     function supportsInterface(bytes4 interfaceID)

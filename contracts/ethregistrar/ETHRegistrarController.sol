@@ -178,7 +178,11 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         uint256 expires = base.renew(uint256(label), duration);
 
         if (msg.value > price.base) {
-            payable(msg.sender).transfer(msg.value - price.base);
+            (bool ok, ) = msg.sender.call{value: msg.value - price.base}("");
+            require(
+                ok,
+                "ETHRegistrarController: failed to refund renew excess"
+            );
         }
 
         _setBalance(referrer, price.base);

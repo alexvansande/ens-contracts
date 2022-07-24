@@ -859,7 +859,7 @@ describe('ETHRegistrarController', () => {
   })
 
   it('should auto wrap the name and allow fuses and expiry to be set', async () => {
-    const MAX_INT_64 = BigNumber.from(2).pow(64).sub(1) //2 ** 64 - 1
+    const MAX_INT_64 = 2n ** 64n - 1n
     const label = 'fuses'
     const name = label + '.eth'
     const commitment = await controller.makeCommitment(
