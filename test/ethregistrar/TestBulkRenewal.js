@@ -7,6 +7,7 @@ const StablePriceOracle = artifacts.require('./StablePriceOracle')
 const BulkRenewal = artifacts.require('./BulkRenewal')
 const NameWrapper = artifacts.require('DummyNameWrapper.sol')
 
+const { expect } = require('chai')
 const namehash = require('eth-ens-namehash')
 const sha3 = require('web3-utils').sha3
 const toBN = require('web3-utils').toBN
@@ -15,7 +16,7 @@ const { exceptions } = require('../test-utils')
 const ETH_LABEL = sha3('eth')
 const ETH_NAMEHASH = namehash.hash('eth')
 
-contract('BulkRenewal', function(accounts) {
+contract('BulkRenewal', function (accounts) {
   let ens
   let resolver
   let baseRegistrar
@@ -26,6 +27,7 @@ contract('BulkRenewal', function(accounts) {
 
   const ownerAccount = accounts[0] // Account that owns the registrar
   const registrantAccount = accounts[1] // Account that owns test names
+  const referrerAccount = accounts[2]
   const EMPTY_ADDRESS = '0x0000000000000000000000000000000000000000'
 
   before(async () => {
@@ -79,7 +81,7 @@ contract('BulkRenewal', function(accounts) {
       resolver.address,
       0
     )
-    await resolver.setInterface(ETH_NAMEHASH, '0xdf7ed181', controller.address)
+    await resolver.setInterface(ETH_NAMEHASH, '0x457aedd9', controller.address)
     await ens.setOwner(ETH_NAMEHASH, baseRegistrar.address)
 
     // Register some names
@@ -96,12 +98,14 @@ contract('BulkRenewal', function(accounts) {
   })
 
   it('should raise an error trying to renew a nonexistent name', async () => {
-    await exceptions.expectFailure(bulkRenewal.renewAll(['foobar'], 86400))
+    await expect(bulkRenewal.renewAll(['foobar'], 86400, referrerAccount, {
+      value: 86401,
+    })).to.be.reverted
   })
 
   it('should permit bulk renewal of names', async () => {
     const oldExpiry = await baseRegistrar.nameExpires(sha3('test2'))
-    const tx = await bulkRenewal.renewAll(['test1', 'test2'], 86400, {
+    const tx = await bulkRenewal.renewAll(['test1', 'test2'], 86400, referrerAccount, {
       value: 86401 * 2,
     })
     assert.equal(tx.receipt.status, true)

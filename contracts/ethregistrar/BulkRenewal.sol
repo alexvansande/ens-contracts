@@ -58,11 +58,7 @@ contract BulkRenewal is IBulkRenewal {
                 names[i],
                 duration
             );
-            controller.renew{value: price.base + price.premium}(
-                names[i],
-                duration,
-                referrer
-            );
+            controller.renew{value: price.base}(names[i], duration, referrer);
         }
         // Send any excess funds back
         payable(msg.sender).transfer(address(this).balance);
