@@ -1,3 +1,10 @@
+import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
+import { artifacts, ethers, web3 } from "hardhat"
+import { expect } from "chai"
+import { BaseRegistrarImplementation, BulkRenewal, ENSRegistry, ETHRegistrarController, NameWrapper, PublicResolver, StablePriceOracle } from "../../typechain-types"
+import { namehash } from "ethers/lib/utils"
+
+
 const ENS = artifacts.require('./registry/ENSRegistry')
 const PublicResolver = artifacts.require('./resolvers/PublicResolver')
 const BaseRegistrar = artifacts.require('./BaseRegistrarImplementation')
@@ -7,30 +14,35 @@ const StablePriceOracle = artifacts.require('./StablePriceOracle')
 const BulkRenewal = artifacts.require('./BulkRenewal')
 const NameWrapper = artifacts.require('DummyNameWrapper.sol')
 
-const { expect } = require('chai')
-const namehash = require('eth-ens-namehash')
 const sha3 = require('web3-utils').sha3
 const toBN = require('web3-utils').toBN
-const { exceptions } = require('../test-utils')
 
 const ETH_LABEL = sha3('eth')
-const ETH_NAMEHASH = namehash.hash('eth')
+const ETH_NAMEHASH = namehash('eth')
 
-contract('BulkRenewal', function (accounts) {
-  let ens
-  let resolver
-  let baseRegistrar
-  let controller
-  let priceOracle
-  let bulkRenewal
-  let nameWrapper
+describe('BulkRenewal', () => {
+  const provider = ethers.getDefaultProvider()
 
-  const ownerAccount = accounts[0] // Account that owns the registrar
-  const registrantAccount = accounts[1] // Account that owns test names
-  const referrerAccount = accounts[2]
-  const EMPTY_ADDRESS = '0x0000000000000000000000000000000000000000'
+  let ens: ENSRegistry
+  let resolver: PublicResolver
+  let baseRegistrar: BaseRegistrarImplementation
+  let controller: ETHRegistrarController
+  let priceOracle: StablePriceOracle
+  let bulkRenewal: BulkRenewal
+  let nameWrapper: NameWrapper
+
+
+  let ownerAccount: SignerWithAddress // Account that owns the registrar
+  let registrantAccount: SignerWithAddress // Account that owns test names
+  let referrerAccount: SignerWithAddress
 
   before(async () => {
+    [
+      ownerAccount,
+      registrantAccount,
+      referrerAccount,
+    ] = await ethers.getSigners();
+
     // Create a registry
     ens = await ENS.new()
     nameWrapper = await NameWrapper.new()
@@ -38,13 +50,13 @@ contract('BulkRenewal', function (accounts) {
     resolver = await PublicResolver.new(
       ens.address,
       nameWrapper.address,
-      EMPTY_ADDRESS,
-      EMPTY_ADDRESS
+      ethers.constants.AddressZero,
+      ethers.constants.AddressZero
     )
 
     // Create a base registrar
-    baseRegistrar = await BaseRegistrar.new(ens.address, namehash.hash('eth'), {
-      from: ownerAccount,
+    baseRegistrar = await BaseRegistrar.new(ens.address, namehash('eth'), {
+      from: ownerAccount.address,
     })
 
     // Set up a dummy price oracle and a controller
@@ -62,13 +74,13 @@ contract('BulkRenewal', function (accounts) {
       600,
       86400,
       nameWrapper.address,
-      EMPTY_ADDRESS,
-      { from: ownerAccount }
+      ethers.constants.AddressZero,
+      { from: ownerAccount.address }
     )
     await baseRegistrar.addController(controller.address, {
-      from: ownerAccount,
+      from: ownerAccount.address,
     })
-    await baseRegistrar.addController(ownerAccount, { from: ownerAccount })
+    await baseRegistrar.addController(ownerAccount.address, { from: ownerAccount.address })
     // Create the bulk registration contract
     bulkRenewal = await BulkRenewal.new(ens.address)
 
@@ -77,7 +89,7 @@ contract('BulkRenewal', function (accounts) {
     await ens.setSubnodeRecord(
       '0x0',
       ETH_LABEL,
-      ownerAccount,
+      ownerAccount.address,
       resolver.address,
       0
     )
@@ -86,32 +98,30 @@ contract('BulkRenewal', function (accounts) {
 
     // Register some names
     for (const name of ['test1', 'test2', 'test3']) {
-      await baseRegistrar.register(sha3(name), registrantAccount, 31536000)
+      await baseRegistrar.register(sha3(name), registrantAccount.address, 31536000)
     }
   })
 
   it('should return the cost of a bulk renewal', async () => {
-    assert.equal(
-      await bulkRenewal.rentPrice(['test1', 'test2'], 86400),
-      86400 * 2
-    )
+    expect((await bulkRenewal.rentPrice(['test1', 'test2'], 86400)).toNumber()).to.equal(86400 * 2)
   })
 
   it('should raise an error trying to renew a nonexistent name', async () => {
-    await expect(bulkRenewal.renewAll(['foobar'], 86400, referrerAccount, {
+    await expect(bulkRenewal.renewAll(['foobar'], 86400, referrerAccount.address, {
       value: 86401,
     })).to.be.reverted
   })
 
   it('should permit bulk renewal of names', async () => {
     const oldExpiry = await baseRegistrar.nameExpires(sha3('test2'))
-    const tx = await bulkRenewal.renewAll(['test1', 'test2'], 86400, referrerAccount, {
+    const tx = await bulkRenewal.renewAll(['test1', 'test2'], 86400, referrerAccount.address, {
       value: 86401 * 2,
     })
-    assert.equal(tx.receipt.status, true)
+
+    expect((tx as any).receipt.status).to.equal(true)
     const newExpiry = await baseRegistrar.nameExpires(sha3('test2'))
-    assert.equal(newExpiry - oldExpiry, 86400)
+    expect(newExpiry.sub(oldExpiry).toNumber()).to.equal(86400)
     // Check any excess funds are returned
-    assert.equal(await web3.eth.getBalance(bulkRenewal.address), 0)
+    expect((await provider.getBalance(bulkRenewal.address)).toNumber()).to.equal(0)
   })
 })

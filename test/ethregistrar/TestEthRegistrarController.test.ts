@@ -1,6 +1,6 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
 import { BaseRegistrarImplementation, ENSRegistry, ETHRegistrarController, NameWrapper, PublicResolver, ReverseRegistrar, StablePriceOracle } from "../../typechain-types"
-import { waffle, ethers } from "hardhat"
+import { ethers } from "hardhat"
 import { expect } from "chai"
 import { namehash } from "ethers/lib/utils"
 import { describe } from "mocha"
