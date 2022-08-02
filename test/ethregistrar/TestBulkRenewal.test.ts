@@ -1,18 +1,19 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
-import { artifacts, ethers, web3 } from "hardhat"
+import { artifacts, ethers } from "hardhat"
 import { expect } from "chai"
 import { BaseRegistrarImplementation, BulkRenewal, ENSRegistry, ETHRegistrarController, NameWrapper, PublicResolver, StablePriceOracle } from "../../typechain-types"
 import { namehash } from "ethers/lib/utils"
+import { interfaceIdFromABI } from "erc-165"
 
-
-const ENS = artifacts.require('./registry/ENSRegistry')
-const PublicResolver = artifacts.require('./resolvers/PublicResolver')
-const BaseRegistrar = artifacts.require('./BaseRegistrarImplementation')
-const ETHRegistrarController = artifacts.require('./ETHRegistrarController')
-const DummyOracle = artifacts.require('./DummyOracle')
-const StablePriceOracle = artifacts.require('./StablePriceOracle')
-const BulkRenewal = artifacts.require('./BulkRenewal')
-const NameWrapper = artifacts.require('DummyNameWrapper.sol')
+const ENS = artifacts.require('ENSRegistry')
+const PublicResolver = artifacts.require('PublicResolver')
+const BaseRegistrar = artifacts.require('BaseRegistrarImplementation')
+const ETHRegistrarController = artifacts.require('ETHRegistrarController')
+const IETHRegistrarController = artifacts.require('IETHRegistrarController')
+const DummyOracle = artifacts.require('DummyOracle')
+const StablePriceOracle = artifacts.require('StablePriceOracle')
+const BulkRenewal = artifacts.require('BulkRenewal')
+const NameWrapper = artifacts.require('DummyNameWrapper')
 
 const sha3 = require('web3-utils').sha3
 const toBN = require('web3-utils').toBN
@@ -93,7 +94,7 @@ describe('BulkRenewal', () => {
       resolver.address,
       0
     )
-    await resolver.setInterface(ETH_NAMEHASH, '0x457aedd9', controller.address)
+    await resolver.setInterface(ETH_NAMEHASH, interfaceIdFromABI(IETHRegistrarController.abi), controller.address)
     await ens.setOwner(ETH_NAMEHASH, baseRegistrar.address)
 
     // Register some names
