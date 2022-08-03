@@ -4,14 +4,12 @@ import { ethers } from "hardhat"
 import { expect } from "chai"
 import { namehash } from "ethers/lib/utils"
 import { describe } from "mocha"
-import { BigNumber } from "ethers"
 
 const {
   evm,
   reverse: { getReverseNode },
   contracts: { deploy },
 } = require('../test-utils')
-
 
 const provider = ethers.provider
 const sha3 = require('web3-utils').sha3
@@ -48,6 +46,7 @@ describe('ETHRegistrarController', () => {
 
   async function registerName(
     name: string,
+    referrer: boolean,
     txOptions = { value: BUFFERED_REGISTRATION_COST }
   ) {
     var commitment = await controller.makeCommitment(
@@ -71,7 +70,7 @@ describe('ETHRegistrarController', () => {
     var tx = await controller.register(
       name,
       registrant1Account.address,
-      referrerAccount.address,
+      referrer ? referrerAccount.address : ethers.constants.AddressZero,
       REGISTRATION_TIME,
       secret,
       NULL_ADDRESS,
@@ -203,7 +202,7 @@ describe('ETHRegistrarController', () => {
   it('should permit new registrations', async () => {
     const name = 'newname'
     const balanceBefore = await (await provider.getBalance(controller.address)).toNumber()
-    const tx = await registerName(name)
+    const tx = await registerName(name, false)
     const block = await provider.getBlock(tx.blockNumber!)
     await expect(tx)
       .to.emit(controller, 'NameRegistered')
@@ -223,14 +222,14 @@ describe('ETHRegistrarController', () => {
   })
 
   it('should revert when not enough ether is transferred', async () => {
-    await expect(registerName('newname', { value: 0 })).to.be.revertedWith(
+    await expect(registerName('newname', false, { value: 0 })).to.be.revertedWith(
       'ETHRegistrarController: Not enough ether provided'
     )
   })
 
   it('should report registered names as unavailable', async () => {
     const name = 'newname'
-    await registerName(name)
+    await registerName(name, false)
     expect(await controller.available(name)).to.equal(false)
   })
 
@@ -654,7 +653,7 @@ describe('ETHRegistrarController', () => {
   })
 
   it('should reject duplicate registrations', async () => {
-    await registerName('newname')
+    await registerName('newname', false)
     await controller.commit(
       await controller.makeCommitment(
         'newname',
@@ -725,7 +724,7 @@ describe('ETHRegistrarController', () => {
   })
 
   it('should allow anyone to renew a name', async () => {
-    await registerName('newname')
+    await registerName('newname', false)
     var expires = await baseRegistrar.nameExpires(sha3('newname'))
     var balanceBefore = (await provider.getBalance(controller.address)).toNumber()
     const duration = 86400
@@ -746,9 +745,60 @@ describe('ETHRegistrarController', () => {
     )
   })
 
-  it('should allow anyone to withdraw funds and transfer to the registrar owner', async () => {
+  it('should withdraw ENS funds without referral and transfer to the registrar owner', async () => {
+    await registerName("newname", false)
+
+    const balanceBefore = (await provider.getBalance(controller.address)).toNumber()
     await controller.withdraw({ from: ownerAccount.address })
+
+    const balanceAfter = (await provider.getBalance(controller.address)).toNumber()
+
+    expect(balanceBefore).to.not.equal(balanceAfter)
     expect((await provider.getBalance(controller.address)).toNumber()).to.equal(0)
+  })
+
+  it('should withdraw ENS funds with referral and transfer to the registrar owner', async () => {
+    await registerName("newname", true)
+
+    const balanceBefore = (await provider.getBalance(controller.address)).toNumber()
+
+    const referralFee = (await controller.referralFee()).toNumber()
+    const expectedReferralValue = Math.floor(balanceBefore / 1000) * referralFee
+    const expectedENSValue = balanceBefore - expectedReferralValue
+
+    await controller.withdraw({ from: ownerAccount.address })
+
+    const balanceAfter = (await provider.getBalance(controller.address)).toNumber()
+
+    expect(balanceBefore - expectedENSValue).to.equal(balanceAfter)
+    expect((await provider.getBalance(controller.address)).toNumber()).to.equal(expectedReferralValue)
+  })
+
+  it('should withdraw referral fee for referrer', async () => {
+    await registerName("newname", true)
+
+    const balanceBefore = (await provider.getBalance(controller.address)).toNumber()
+    const referralFee = (await controller.referralFee()).toNumber()
+    const expectedReferralValue = Math.floor(balanceBefore / 1000) * referralFee
+
+    await controller.connect(referrerAccount).withdraw()
+
+    const balanceAfter = (await provider.getBalance(controller.address)).toNumber()
+
+    expect(balanceBefore).to.not.equal(balanceAfter)
+    expect(balanceBefore - balanceAfter).to.equal(expectedReferralValue)
+  })
+
+  it("shouldn't withdraw any referral fee not being referrer", async () => {
+    await registerName("newname", true)
+
+    const balanceBefore = (await provider.getBalance(controller.address)).toNumber()
+
+    await controller.connect(registrant1Account).withdraw()
+
+    const balanceAfter = (await provider.getBalance(controller.address)).toNumber()
+
+    expect(balanceBefore).to.equal(balanceAfter)
   })
 
   it('should set the reverse record of the account', async () => {
@@ -981,15 +1031,15 @@ describe('ETHRegistrarController', () => {
       { value: BUFFERED_REGISTRATION_COST }
     )
 
-    console.log((await tx.wait()).gasUsed.toString())
-
-    console.log(gasA.toString(), gasB.toString())
-
     expect(await nameWrapper.ownerOf(node)).to.equal(registrant1Account.address)
     expect(await ens.owner(namehash(name))).to.equal(nameWrapper.address)
     expect(await baseRegistrar.ownerOf(sha3(label))).to.equal(
       nameWrapper.address
     )
     expect(await resolver2['addr(bytes32)'](node)).to.equal(registrant1Account.address)
+  })
+
+  it('get contract balance', async () => {
+
   })
 })
