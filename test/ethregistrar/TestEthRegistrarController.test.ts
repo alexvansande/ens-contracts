@@ -792,13 +792,7 @@ describe('ETHRegistrarController', () => {
   it("shouldn't withdraw any referral fee not being referrer", async () => {
     await registerName("newname", true)
 
-    const balanceBefore = (await provider.getBalance(controller.address)).toNumber()
-
-    await controller.connect(registrant1Account).withdraw()
-
-    const balanceAfter = (await provider.getBalance(controller.address)).toNumber()
-
-    expect(balanceBefore).to.equal(balanceAfter)
+    await expect(controller.connect(registrant1Account).withdraw()).to.be.revertedWith("ETHRegistrarController: No balance to withdraw")
   })
 
   it('should set the reverse record of the account', async () => {

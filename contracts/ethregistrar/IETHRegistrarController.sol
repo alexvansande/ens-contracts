@@ -3,6 +3,24 @@ pragma solidity >=0.8.4;
 import "./IPriceOracle.sol";
 
 interface IETHRegistrarController {
+    event NameRegistered(
+        string name,
+        bytes32 indexed label,
+        address indexed owner,
+        uint256 baseCost,
+        uint256 premium,
+        uint256 expires
+    );
+    event NameRenewed(
+        string name,
+        bytes32 indexed label,
+        uint256 cost,
+        uint256 expires,
+        address referrer
+    );
+    event ReferrerReceived(address indexed referrer, uint256 amount);
+    event ReferralFeeUpdated(uint256 indexed prevFee, uint256 indexed curFee);
+
     function rentPrice(string memory, uint256)
         external
         returns (IPriceOracle.Price memory);
