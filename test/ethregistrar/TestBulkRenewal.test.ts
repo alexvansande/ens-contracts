@@ -3,7 +3,7 @@ import { artifacts, ethers } from "hardhat"
 import { expect } from "chai"
 import { BaseRegistrarImplementation, BulkRenewal, ENSRegistry, ETHRegistrarController, NameWrapper, PublicResolver, StablePriceOracle } from "../../typechain-types"
 import { namehash } from "ethers/lib/utils"
-import { interfaceIdFromABI } from "erc-165"
+import { interfaceIdFromABI } from "erc165"
 
 const ENS = artifacts.require('ENSRegistry')
 const PublicResolver = artifacts.require('PublicResolver')

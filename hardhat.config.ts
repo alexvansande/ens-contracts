@@ -31,7 +31,7 @@ const config: HardhatUserConfig = {
     },
     localhost: {
       url: 'http://127.0.0.1:8545',
-      saveDeployments: true,
+      saveDeployments: false,
       tags: ['test', 'legacy', 'use_root'],
     },
     ropsten: {

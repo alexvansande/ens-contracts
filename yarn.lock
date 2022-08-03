@@ -4007,10 +4007,10 @@ env-paths@^2.2.0:
   resolved "https://registry.yarnpkg.com/env-paths/-/env-paths-2.2.1.tgz#420399d416ce1fbe9bc0a07c62fa68d67fd0f8f2"
   integrity sha512-+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A==
 
-erc-165@^1.0.0:
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/erc-165/-/erc-165-1.0.0.tgz#82cb6fd71b13f2894b13617aa3758fccd181427b"
-  integrity sha512-EJzbDlfsuwxCxfCaDXubPO5OnzUvwf2LiKJOU6TrW4y1/p9xUSWU0+/EnNzlDBROnQpscMLCzLuvOtmV8C5umw==
+erc165@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/erc165/-/erc165-1.0.1.tgz#8d4d2d74ee3dcb44de9fcfcab732d43126763634"
+  integrity sha512-TopPnSNNs0TNptr5C7YyVOZSVJfw+SGAuFXqhX4q+vh0VsAgTFzinFlQGemrTzkyqExSRCtBU34bxEM1aNRpDg==
   dependencies:
     js-sha3 "^0.8.0"
 

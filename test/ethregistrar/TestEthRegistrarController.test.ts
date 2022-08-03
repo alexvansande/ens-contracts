@@ -740,8 +740,8 @@ describe('ETHRegistrarController', () => {
   })
 
   it('should require sufficient value for a renewal', async () => {
-    expect(controller.renew('name', 86400, referrerAccount.address)).to.be.revertedWith(
-      'ETHController: Not enough Ether provided for renewal'
+    await expect(controller.renew('name', 86400, referrerAccount.address)).to.be.revertedWith(
+      'ETHRegistrarController: Not enough Ether provided for renewal'
     )
   })
 
