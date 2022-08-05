@@ -1,5 +1,5 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
-import { BaseRegistrarImplementation, ENSRegistry, ETHRegistrarController, NameWrapper, PublicResolver, ReverseRegistrar, StablePriceOracle } from "../../typechain-types"
+import { BaseRegistrarImplementation, ENSRegistry, ETHRegistrarControllerV2, NameWrapper, PublicResolver, ReverseRegistrar, StablePriceOracle } from "../../typechain-types"
 import { ethers } from "hardhat"
 import { expect } from "chai"
 import { namehash } from "ethers/lib/utils"
@@ -17,17 +17,16 @@ const sha3 = require('web3-utils').sha3
 const DAYS = 24 * 60 * 60
 const REGISTRATION_TIME = 28 * DAYS
 const BUFFERED_REGISTRATION_COST = REGISTRATION_TIME + 3 * DAYS
-const NULL_ADDRESS = '0x0000000000000000000000000000000000000000'
 const EMPTY_BYTES =
   '0x0000000000000000000000000000000000000000000000000000000000000000'
 
-describe('ETHRegistrarController', () => {
+describe('ETHRegistrarControllerV2', () => {
   let ens: ENSRegistry
   let resolver: PublicResolver
   let resolver2: PublicResolver // resolver signed by registrant1Account
   let baseRegistrar: BaseRegistrarImplementation
-  let controller: ETHRegistrarController
-  let controller2: ETHRegistrarController // controller signed by registrant1Account
+  let controller: ETHRegistrarControllerV2
+  let controller2: ETHRegistrarControllerV2 // controller signed by registrant1Account
   let priceOracle: StablePriceOracle
   let reverseRegistrar: ReverseRegistrar
   let nameWrapper: NameWrapper
@@ -41,6 +40,7 @@ describe('ETHRegistrarController', () => {
   let ownerAccount: SignerWithAddress // Account that owns the registrar
   let registrant1Account: SignerWithAddress // Account that owns test names
   let registrant2Account: SignerWithAddress // Account that owns test names
+  let referrerAccount: SignerWithAddress // Account that refer test names
 
 
   async function registerName(
@@ -53,7 +53,7 @@ describe('ETHRegistrarController', () => {
       registrant1Account.address,
       REGISTRATION_TIME,
       secret,
-      NULL_ADDRESS,
+      ethers.constants.AddressZero,
       [],
       false,
       0,
@@ -69,9 +69,10 @@ describe('ETHRegistrarController', () => {
     var tx = await controller.register(
       name,
       registrant1Account.address,
+      referrer ? referrerAccount.address : ethers.constants.AddressZero,
       REGISTRATION_TIME,
       secret,
-      NULL_ADDRESS,
+      ethers.constants.AddressZero,
       [],
       false,
       0,
@@ -87,6 +88,7 @@ describe('ETHRegistrarController', () => {
       ownerAccount,
       registrant1Account,
       registrant2Account,
+      referrerAccount,
     ] = await ethers.getSigners();
 
     ens = await deploy('ENSRegistry')
@@ -117,7 +119,7 @@ describe('ETHRegistrarController', () => {
       1,
     ])
     controller = await deploy(
-      'ETHRegistrarController',
+      'ETHRegistrarControllerV2',
       baseRegistrar.address,
       priceOracle.address,
       600,
@@ -220,7 +222,7 @@ describe('ETHRegistrarController', () => {
 
   it('should revert when not enough ether is transferred', async () => {
     await expect(registerName('newname', false, { value: 0 })).to.be.revertedWith(
-      'ETHRegistrarController: Not enough ether provided'
+      'ETHRegistrarControllerV2: Not enough ether provided'
     )
   })
 
@@ -262,6 +264,7 @@ describe('ETHRegistrarController', () => {
     var tx = await controller.register(
       'newconfigname',
       registrant1Account.address,
+      referrerAccount.address,
       REGISTRATION_TIME,
       secret,
       resolver.address,
@@ -321,7 +324,7 @@ describe('ETHRegistrarController', () => {
         registrant1Account.address,
         REGISTRATION_TIME,
         secret,
-        NULL_ADDRESS,
+        ethers.constants.AddressZero,
         [
           resolver.interface.encodeFunctionData('setAddr(bytes32,address)', [
             namehash('newconfigname.eth'),
@@ -338,7 +341,7 @@ describe('ETHRegistrarController', () => {
         0
       )
     ).to.be.revertedWith(
-      'ETHRegistrarController: resolver is required when data is supplied'
+      'ETHRegistrarControllerV2: resolver is required when data is supplied'
     )
   })
 
@@ -375,6 +378,7 @@ describe('ETHRegistrarController', () => {
       controller.register(
         'newconfigname',
         registrant1Account.address,
+        referrerAccount.address,
         REGISTRATION_TIME,
         secret,
         registrant1Account.address,
@@ -430,6 +434,7 @@ describe('ETHRegistrarController', () => {
       controller.register(
         'newconfigname',
         registrant1Account.address,
+        referrerAccount.address,
         REGISTRATION_TIME,
         secret,
         controller.address,
@@ -449,7 +454,7 @@ describe('ETHRegistrarController', () => {
         0,
         { value: BUFFERED_REGISTRATION_COST }
       )
-    ).to.be.revertedWith('ETHRegistrarController: Failed to set Record')
+    ).to.be.revertedWith('ETHRegistrarControllerV2: Failed to set Record')
   })
 
   it('should not permit new registrations with records updating a different name', async () => {
@@ -480,6 +485,7 @@ describe('ETHRegistrarController', () => {
       controller.register(
         'awesome',
         registrant1Account.address,
+        referrerAccount.address,
         REGISTRATION_TIME,
         secret,
         resolver.address,
@@ -495,7 +501,7 @@ describe('ETHRegistrarController', () => {
         { value: BUFFERED_REGISTRATION_COST }
       )
     ).to.be.revertedWith(
-      'ETHRegistrarController: Namehash on record do not match the name being registered'
+      'ETHRegistrarControllerV2: Namehash on record do not match the name being registered'
     )
   })
 
@@ -531,6 +537,7 @@ describe('ETHRegistrarController', () => {
       controller.register(
         'awesome',
         registrant1Account.address,
+        referrerAccount.address,
         REGISTRATION_TIME,
         secret,
         resolver.address,
@@ -550,7 +557,7 @@ describe('ETHRegistrarController', () => {
         { value: BUFFERED_REGISTRATION_COST }
       )
     ).to.be.revertedWith(
-      'ETHRegistrarController: Namehash on record do not match the name being registered'
+      'ETHRegistrarControllerV2: Namehash on record do not match the name being registered'
     )
   })
 
@@ -576,6 +583,7 @@ describe('ETHRegistrarController', () => {
     let tx2 = await controller.register(
       'newconfigname2',
       registrant1Account.address,
+      referrerAccount.address,
       REGISTRATION_TIME,
       secret,
       resolver.address,
@@ -602,7 +610,7 @@ describe('ETHRegistrarController', () => {
     const nodehash = namehash('newconfigname2.eth')
     const balanceAfter = (await provider.getBalance(controller.address)).toNumber()
     expect(await ens.resolver(nodehash)).to.equal(resolver.address)
-    expect(await resolver['addr(bytes32)'](nodehash)).to.equal(NULL_ADDRESS)
+    expect(await resolver['addr(bytes32)'](nodehash)).to.equal(ethers.constants.AddressZero)
     expect(
       balanceAfter - balanceBefore
     ).to.equal(REGISTRATION_TIME)
@@ -615,7 +623,7 @@ describe('ETHRegistrarController', () => {
         registrant2Account.address,
         REGISTRATION_TIME,
         secret,
-        NULL_ADDRESS,
+        ethers.constants.AddressZero,
         [],
         false,
         0,
@@ -628,9 +636,10 @@ describe('ETHRegistrarController', () => {
       controller.register(
         'newname2',
         registrant1Account.address,
+        referrerAccount.address,
         REGISTRATION_TIME,
         secret,
-        NULL_ADDRESS,
+        ethers.constants.AddressZero,
         [],
         false,
         0,
@@ -650,7 +659,7 @@ describe('ETHRegistrarController', () => {
         registrant1Account.address,
         REGISTRATION_TIME,
         secret,
-        NULL_ADDRESS,
+        ethers.constants.AddressZero,
         [],
         false,
         0,
@@ -663,9 +672,10 @@ describe('ETHRegistrarController', () => {
       controller.register(
         'newname',
         registrant1Account.address,
+        referrerAccount.address,
         REGISTRATION_TIME,
         secret,
-        NULL_ADDRESS,
+        ethers.constants.AddressZero,
         [],
         false,
         0,
@@ -674,7 +684,7 @@ describe('ETHRegistrarController', () => {
           value: BUFFERED_REGISTRATION_COST,
         }
       )
-    ).to.be.revertedWith('ETHRegistrarController: Name is unavailable')
+    ).to.be.revertedWith('ETHRegistrarControllerV2: Name is unavailable')
   })
 
   it('should reject for expired commitments', async () => {
@@ -684,7 +694,7 @@ describe('ETHRegistrarController', () => {
         registrant1Account.address,
         REGISTRATION_TIME,
         secret,
-        NULL_ADDRESS,
+        ethers.constants.AddressZero,
         [],
         false,
         0,
@@ -697,9 +707,10 @@ describe('ETHRegistrarController', () => {
       controller.register(
         'newname2',
         registrant1Account.address,
+        referrerAccount.address,
         REGISTRATION_TIME,
         secret,
-        NULL_ADDRESS,
+        ethers.constants.AddressZero,
         [],
         false,
         0,
@@ -708,7 +719,7 @@ describe('ETHRegistrarController', () => {
           value: BUFFERED_REGISTRATION_COST,
         }
       )
-    ).to.be.revertedWith('ETHRegistrarController: Commitment has expired')
+    ).to.be.revertedWith('ETHRegistrarControllerV2: Commitment has expired')
   })
 
   it('should allow anyone to renew a name', async () => {
@@ -717,7 +728,7 @@ describe('ETHRegistrarController', () => {
     var balanceBefore = (await provider.getBalance(controller.address)).toNumber()
     const duration = 86400
     const [price] = await controller.rentPrice(sha3('newname'), duration)
-    await controller.renew('newname', duration, { value: price })
+    await controller.renew('newname', duration, referrerAccount.address, { value: price })
     var newExpires = await baseRegistrar.nameExpires(sha3('newname'))
     const balanceAfter = (await provider.getBalance(controller.address)).toNumber()
 
@@ -728,12 +739,12 @@ describe('ETHRegistrarController', () => {
   })
 
   it('should require sufficient value for a renewal', async () => {
-    await expect(controller.renew('name', 86400)).to.be.revertedWith(
-      'ETHController: Not enough Ether provided for renewal'
+    await expect(controller.renew('name', 86400, referrerAccount.address)).to.be.revertedWith(
+      'ETHRegistrarControllerV2: Not enough Ether provided for renewal'
     )
   })
 
-  it('should withdraw ENS funds and transfer to the registrar owner', async () => {
+  it('should withdraw ENS funds without referral and transfer to the registrar owner', async () => {
     await registerName("newname", false)
 
     const balanceBefore = (await provider.getBalance(controller.address)).toNumber()
@@ -743,6 +754,44 @@ describe('ETHRegistrarController', () => {
 
     expect(balanceBefore).to.not.equal(balanceAfter)
     expect((await provider.getBalance(controller.address)).toNumber()).to.equal(0)
+  })
+
+  it('should withdraw ENS funds with referral and transfer to the registrar owner', async () => {
+    await registerName("newname", true)
+
+    const balanceBefore = (await provider.getBalance(controller.address)).toNumber()
+
+    const referralFee = (await controller.referralFee()).toNumber()
+    const expectedReferralValue = Math.floor(balanceBefore / 1000) * referralFee
+    const expectedENSValue = balanceBefore - expectedReferralValue
+
+    await controller.withdraw({ from: ownerAccount.address })
+
+    const balanceAfter = (await provider.getBalance(controller.address)).toNumber()
+
+    expect(balanceBefore - expectedENSValue).to.equal(balanceAfter)
+    expect((await provider.getBalance(controller.address)).toNumber()).to.equal(expectedReferralValue)
+  })
+
+  it('should withdraw referral fee for referrer', async () => {
+    await registerName("newname", true)
+
+    const balanceBefore = (await provider.getBalance(controller.address)).toNumber()
+    const referralFee = (await controller.referralFee()).toNumber()
+    const expectedReferralValue = Math.floor(balanceBefore / 1000) * referralFee
+
+    await controller.connect(referrerAccount).withdraw()
+
+    const balanceAfter = (await provider.getBalance(controller.address)).toNumber()
+
+    expect(balanceBefore).to.not.equal(balanceAfter)
+    expect(balanceBefore - balanceAfter).to.equal(expectedReferralValue)
+  })
+
+  it("shouldn't withdraw any referral fee not being referrer", async () => {
+    await registerName("newname", true)
+
+    await expect(controller.connect(registrant1Account).withdraw()).to.be.revertedWith("ETHRegistrarControllerV2: No balance to withdraw")
   })
 
   it('should set the reverse record of the account', async () => {
@@ -763,6 +812,7 @@ describe('ETHRegistrarController', () => {
     await controller.register(
       'reverse',
       registrant1Account.address,
+      referrerAccount.address,
       REGISTRATION_TIME,
       secret,
       resolver.address,
@@ -796,6 +846,7 @@ describe('ETHRegistrarController', () => {
     await controller.register(
       'noreverse',
       registrant1Account.address,
+      referrerAccount.address,
       REGISTRATION_TIME,
       secret,
       resolver.address,
@@ -829,6 +880,7 @@ describe('ETHRegistrarController', () => {
     await controller.register(
       label,
       registrant1Account.address,
+      referrerAccount.address,
       REGISTRATION_TIME,
       secret,
       resolver.address,
@@ -870,6 +922,7 @@ describe('ETHRegistrarController', () => {
     const tx = await controller.register(
       label,
       registrant1Account.address,
+      referrerAccount.address,
       REGISTRATION_TIME,
       secret,
       resolver.address,
@@ -915,6 +968,7 @@ describe('ETHRegistrarController', () => {
     const gasA = await controller2.estimateGas.register(
       label,
       registrant1Account.address,
+      referrerAccount.address,
       REGISTRATION_TIME,
       secret,
       resolver.address,
@@ -935,6 +989,7 @@ describe('ETHRegistrarController', () => {
     const gasB = await controller2.estimateGas.register(
       label,
       registrant1Account.address,
+      referrerAccount.address,
       REGISTRATION_TIME,
       secret,
       resolver2.address,
@@ -953,6 +1008,7 @@ describe('ETHRegistrarController', () => {
     const tx = await controller2.register(
       label,
       registrant1Account.address,
+      referrerAccount.address,
       REGISTRATION_TIME,
       secret,
       resolver2.address,

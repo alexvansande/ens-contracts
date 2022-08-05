@@ -108,14 +108,14 @@ describe('BulkRenewal', () => {
   })
 
   it('should raise an error trying to renew a nonexistent name', async () => {
-    await expect(bulkRenewal.renewAll(['foobar'], 86400, referrerAccount.address, {
+    await expect(bulkRenewal.renewAll(['foobar'], 86400, {
       value: 86401,
     })).to.be.reverted
   })
 
   it('should permit bulk renewal of names', async () => {
     const oldExpiry = await baseRegistrar.nameExpires(sha3('test2'))
-    const tx = await bulkRenewal.renewAll(['test1', 'test2'], 86400, referrerAccount.address, {
+    const tx = await bulkRenewal.renewAll(['test1', 'test2'], 86400, {
       value: 86401 * 2,
     })
 

@@ -47,23 +47,21 @@ contract BulkRenewal is IBulkRenewal {
         }
     }
 
-    function renewAll(
-        string[] calldata names,
-        uint256 duration,
-        address referrer
-    ) external payable override {
+    function renewAll(string[] calldata names, uint256 duration)
+        external
+        payable
+        override
+    {
         ETHRegistrarController controller = getController();
         for (uint256 i = 0; i < names.length; i++) {
             IPriceOracle.Price memory price = controller.rentPrice(
                 names[i],
                 duration
             );
-            controller.renew{value: price.base}(names[i], duration, referrer);
+            controller.renew{value: price.base}(names[i], duration);
         }
-
         // Send any excess funds back
-        (bool ok, ) = msg.sender.call{value: address(this).balance}("");
-        require(ok, "BulkRenewal: failed to refund renew excess");
+        payable(msg.sender).transfer(address(this).balance);
     }
 
     function supportsInterface(bytes4 interfaceID)

@@ -30,18 +30,22 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
     INameWrapper public immutable nameWrapper;
 
     mapping(bytes32 => uint256) public commitments;
-    mapping(address => uint256) public balances;
-    uint256 public referralFee = 50;
 
-    /**
-     * @dev Constructor
-     * @param _base The address of the ENS registry.
-     * @param _prices The IPriceOracle interface.
-     * @param _minCommitmentAge Minimum commitment time.
-     * @param _maxCommitmentAge Maximum commitment time.
-     * @param _reverseRegistrar The ReverseRegistrar interface.
-     * @param _nameWrapper The INameWrapper interface
-     */
+    event NameRegistered(
+        string name,
+        bytes32 indexed label,
+        address indexed owner,
+        uint256 baseCost,
+        uint256 premium,
+        uint256 expires
+    );
+    event NameRenewed(
+        string name,
+        bytes32 indexed label,
+        uint256 cost,
+        uint256 expires
+    );
+
     constructor(
         BaseRegistrarImplementation _base,
         IPriceOracle _prices,
@@ -60,22 +64,6 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         nameWrapper = _nameWrapper;
     }
 
-    /**
-     * @dev Checks if the name is available.
-     * @param name The name to be checked.
-     * @return True if `name` is available.
-     */
-    function available(string memory name) public view override returns (bool) {
-        bytes32 label = keccak256(bytes(name));
-        return valid(name) && base.available(uint256(label));
-    }
-
-    /**
-     * @dev Price of the ENS name, given a duration
-     * @param name Name to be checked for availability.
-     * @param duration The address of the ENS registry.
-     * @return price struct from IPriceOracle.
-     */
     function rentPrice(string memory name, uint256 duration)
         public
         view
@@ -86,80 +74,15 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         price = prices.price(name, base.nameExpires(uint256(label)), duration);
     }
 
-    /**
-     * @dev Return True or False for match criteria.
-     * @param name The name to be checked.
-     * @return True if `lenght` is bigger than 3.
-     */
     function valid(string memory name) public pure returns (bool) {
         return name.strlen() >= 3;
     }
 
-    /**
-     * @dev Set the commitment for a given hash as the current block
-     *      timestamp. Max commitment must happen at the same instant.
-     * @param commitment The hash of the current commitment.
-     */
-    function commit(bytes32 commitment) public override {
-        require(
-            commitments[commitment] + maxCommitmentAge < block.timestamp,
-            "ETHRegistrarController: Cannot insert timestamp due to max commitment age extrapolation"
-        );
-        commitments[commitment] = block.timestamp;
+    function available(string memory name) public view override returns (bool) {
+        bytes32 label = keccak256(bytes(name));
+        return valid(name) && base.available(uint256(label));
     }
 
-    /**
-     * @dev Check if interface is implemented.
-     * @param interfaceID The first 4 bytes of the interface ID.
-     * @return True if interface is supported, false otherwise.
-     */
-    function supportsInterface(bytes4 interfaceID)
-        external
-        pure
-        returns (bool)
-    {
-        return
-            interfaceID == type(IERC165).interfaceId ||
-            interfaceID == type(IETHRegistrarController).interfaceId;
-    }
-
-    /**
-     * @dev Sets the new referral fee in percentage with one decimal.
-     * @param _referralFee The fee to be used. From 0 to 1000.
-     */
-    function setReferralFee(uint256 _referralFee) external onlyOwner {
-        require(
-            _referralFee <= 1000,
-            "ETHRegistrarController: Referral fee max is 1000"
-        );
-
-        emit ReferralFeeUpdated(referralFee, _referralFee);
-        referralFee = _referralFee;
-    }
-
-    /**
-     * @dev Withdraw everything from balance.
-     */
-    function withdraw() public {
-        uint256 amount = balances[msg.sender];
-        require(amount != 0, "ETHRegistrarController: No balance to withdraw");
-        balances[msg.sender] = 0;
-        payable(msg.sender).transfer(amount);
-    }
-
-    /**
-     * @dev Checks if the name is available.
-     * @param name The ENS name.
-     * @param owner The owner to be.
-     * @param duration The expiration period.
-     * @param secret The secret hash for validation.
-     * @param resolver The resolver.
-     * @param data Extra data.
-     * @param reverseRecord If there is a reverse record.
-     * @param fuses The initial fuses to set.
-     * @param wrapperExpiry The expiry date.
-     * @return The commitment hash.
-     */
     function makeCommitment(
         string memory name,
         address owner,
@@ -194,23 +117,14 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
             );
     }
 
-    /**
-     * @dev Registers a new ENS domain.
-     * @param name The ENS name.
-     * @param owner The owner to be.
-     * @param referrer The referrer of the owner.
-     * @param duration The expiration period.
-     * @param secret The secret hash for validation.
-     * @param resolver The resolver.
-     * @param data Extra data.
-     * @param reverseRecord If there is a reverse record.
-     * @param fuses The initial fuses to set.
-     * @param wrapperExpiry The expiry date.
-     */
+    function commit(bytes32 commitment) public override {
+        require(commitments[commitment] + maxCommitmentAge < block.timestamp);
+        commitments[commitment] = block.timestamp;
+    }
+
     function register(
         string calldata name,
         address owner,
-        address referrer,
         uint256 duration,
         bytes32 secret,
         address resolver,
@@ -220,95 +134,17 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         uint64 wrapperExpiry
     ) public payable override {
         IPriceOracle.Price memory price = rentPrice(name, duration);
-        uint256 totalPrice = price.base + price.premium;
         require(
-            msg.value >= totalPrice,
+            msg.value >= (price.base + price.premium),
             "ETHRegistrarController: Not enough ether provided"
         );
 
-        _register(
-            name,
-            owner,
-            duration,
-            secret,
-            resolver,
-            data,
-            reverseRecord,
-            fuses,
-            wrapperExpiry,
-            price
-        );
-
-        if (msg.value > totalPrice) {
-            payable(msg.sender).transfer(msg.value - totalPrice);
-        }
-
-        _setBalance(referrer, totalPrice);
-    }
-
-    /**
-     * @dev Renew the current ENS registration for a given duration.
-     * @param name The ENS name to be renewed.
-     * @param duration The increase in the duration.
-     * @param referrer The referrer to receive the commission.
-     */
-    function renew(
-        string calldata name,
-        uint256 duration,
-        address referrer
-    ) external payable override {
-        bytes32 label = keccak256(bytes(name));
-        IPriceOracle.Price memory price = rentPrice(name, duration);
-        require(
-            msg.value >= price.base,
-            "ETHRegistrarController: Not enough Ether provided for renewal"
-        );
-
-        uint256 expires = base.renew(uint256(label), duration);
-
-        if (msg.value > price.base) {
-            (bool ok, ) = msg.sender.call{value: msg.value - price.base}("");
-            require(
-                ok,
-                "ETHRegistrarController: failed to refund renew excess"
-            );
-        }
-
-        _setBalance(referrer, price.base);
-
-        emit NameRenewed(name, label, msg.value, expires, referrer);
-    }
-
-    /**
-     * @dev Registers a new ENS domain.
-     * @param name The ENS name.
-     * @param nameOwner The name owner.
-     * @param duration The expiration period of tmie.
-     * @param secret The secret hash for validation.
-     * @param resolver The resolver.
-     * @param data Extra data.
-     * @param reverseRecord If there is a reverse record.
-     * @param fuses The initial fuses to set.
-     * @param wrapperExpiry The expiry date.
-     */
-    function _register(
-        string calldata name,
-        address nameOwner,
-        uint256 duration,
-        bytes32 secret,
-        address resolver,
-        bytes[] calldata data,
-        bool reverseRecord,
-        uint32 fuses,
-        uint64 wrapperExpiry,
-        IPriceOracle.Price memory price
-    ) internal {
         _consumeCommitment(
             name,
             duration,
             makeCommitment(
                 name,
-                nameOwner,
+                owner,
                 duration,
                 secret,
                 resolver,
@@ -321,7 +157,7 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
 
         uint256 expires = nameWrapper.registerAndWrapETH2LD(
             name,
-            nameOwner,
+            owner,
             duration,
             resolver,
             fuses,
@@ -337,30 +173,68 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         emit NameRegistered(
             name,
             keccak256(bytes(name)),
-            nameOwner,
+            owner,
             price.base,
             price.premium,
             expires
         );
+
+        if (msg.value > (price.base + price.premium)) {
+            payable(msg.sender).transfer(
+                msg.value - (price.base + price.premium)
+            );
+        }
     }
 
-    /**
-     * @dev Requires a valid commitment (is old enough and is committed).
-     *      If the commitment is too old, or the name is registered, stop.
-     * @param name The ENS name.
-     * @param duration The expiration days.
-     * @param commitment The hash of the commitments.
-     */
+    function renew(string calldata name, uint256 duration)
+        external
+        payable
+        override
+    {
+        bytes32 label = keccak256(bytes(name));
+        IPriceOracle.Price memory price = rentPrice(name, duration);
+        require(
+            msg.value >= price.base,
+            "ETHController: Not enough Ether provided for renewal"
+        );
+
+        uint256 expires = base.renew(uint256(label), duration);
+
+        if (msg.value > price.base) {
+            payable(msg.sender).transfer(msg.value - price.base);
+        }
+
+        emit NameRenewed(name, label, msg.value, expires);
+    }
+
+    function withdraw() public {
+        payable(owner()).transfer(address(this).balance);
+    }
+
+    function supportsInterface(bytes4 interfaceID)
+        external
+        pure
+        returns (bool)
+    {
+        return
+            interfaceID == type(IERC165).interfaceId ||
+            interfaceID == type(IETHRegistrarController).interfaceId;
+    }
+
+    /* Internal functions */
+
     function _consumeCommitment(
         string memory name,
         uint256 duration,
         bytes32 commitment
     ) internal {
+        // Require a valid commitment (is old enough and is committed)
         require(
             commitments[commitment] + minCommitmentAge <= block.timestamp,
             "ETHRegistrarController: Commitment is not valid"
         );
 
+        // If the commitment is too old, or the name is registered, stop
         require(
             commitments[commitment] + maxCommitmentAge > block.timestamp,
             "ETHRegistrarController: Commitment has expired"
@@ -372,35 +246,15 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         require(duration >= MIN_REGISTRATION_DURATION);
     }
 
-    /**
-     * @dev Set the balance after a successful registration or renewal.
-     * @param referrer The referrer of the purchase.
-     * @param amount The amount in wei.
-     */
-    function _setBalance(address referrer, uint256 amount) internal {
-        if (referrer == address(0) || referralFee == 0) {
-            balances[owner()] += amount;
-        } else {
-            uint256 referralFeePrice = (amount / 1000) * referralFee;
-            balances[referrer] += referralFeePrice;
-            balances[owner()] += amount - referralFeePrice;
-            emit ReferrerReceived(referrer, referralFeePrice);
-        }
-    }
-
-    /**
-     * @dev Set the records by checking if the first few bytes
-     *      the hardcoded .eth namehash.
-     * @param resolver The resolver to use.
-     * @param label The hash of the ENS name.
-     */
     function _setRecords(
         address resolver,
         bytes32 label,
         bytes[] calldata data
     ) internal {
+        // use hardcoded .eth namehash
         bytes32 nodehash = keccak256(abi.encodePacked(ETH_NODE, label));
         for (uint256 i = 0; i < data.length; i++) {
+            // check first few bytes are namehash
             bytes32 txNamehash = bytes32(data[i][4:36]);
             require(
                 txNamehash == nodehash,
@@ -413,12 +267,6 @@ contract ETHRegistrarController is Ownable, IETHRegistrarController {
         }
     }
 
-    /**
-     * @dev Reverse resolution maps from an address back to a name.
-     * @param name The name to be settled.
-     * @param resolver The resolver address.
-     * @param owner The owner of the ENS reverse record.
-     */
     function _setReverseRecord(
         string memory name,
         address resolver,

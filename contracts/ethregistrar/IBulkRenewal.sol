@@ -4,9 +4,7 @@ interface IBulkRenewal {
         view
         returns (uint256 total);
 
-    function renewAll(
-        string[] calldata names,
-        uint256 duration,
-        address referrer
-    ) external payable;
+    function renewAll(string[] calldata names, uint256 duration)
+        external
+        payable;
 }
