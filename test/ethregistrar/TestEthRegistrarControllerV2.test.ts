@@ -187,6 +187,36 @@ describe('ETHRegistrarControllerV2', () => {
     await ethers.provider.send('evm_revert', [result])
   })
 
+  it('should change referral fee', async () => {
+    const newFee = 100
+    const feeBefore = await controller.referralFee()
+
+    await controller.setReferralFee(newFee)
+
+    const feeAfter = await controller.referralFee()
+    expect(feeAfter).to.not.equal(feeBefore)
+  })
+
+  it('should change referral fee and withdraw correct value', async () => {
+    const newFee = 100
+    const feeBeforeChange = (await controller.referralFee()).toNumber()
+
+    await controller.setReferralFee(newFee)
+
+    const feeAfter = (await controller.referralFee()).toNumber()
+
+    await registerName("newname", true)
+
+
+    const balanceBefore = (await provider.getBalance(controller.address)).toNumber()
+    await controller.connect(referrerAccount).withdraw()
+    const balanceAfter = (await provider.getBalance(controller.address)).toNumber()
+    const expectedReferralValue = Math.floor(balanceBefore / 1000) * feeAfter;
+
+    expect(feeAfter).to.not.equal(feeBeforeChange)
+    expect(balanceBefore).to.not.equal(balanceAfter)
+    expect(balanceBefore - balanceAfter).to.equal(expectedReferralValue)
+  })
 
   it('should report label validity', async () => {
     for (const label in checkLabels) {
@@ -1030,9 +1060,5 @@ describe('ETHRegistrarControllerV2', () => {
       nameWrapper.address
     )
     expect(await resolver2['addr(bytes32)'](node)).to.equal(registrant1Account.address)
-  })
-
-  it('get contract balance', async () => {
-
   })
 })
